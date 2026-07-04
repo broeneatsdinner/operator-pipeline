@@ -1,0 +1,27 @@
+# Runtime state
+/log/*
+!/log/.gitkeep
+!/log/operator-identity-history.example.tsv
+
+# Generated scan artifacts
+/scans/*
+!/scans/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local/private configuration
+.env
+.env.*
+*.pem
+*.key
+*.crt
+secrets/
+private/
+notes/
+workbench/
+
+# macOS
+.DS_Store

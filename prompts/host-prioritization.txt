@@ -1,0 +1,54 @@
+You are reviewing an operator-scan enriched transcript.
+
+Use the supplied enriched transcript as the only source of observed facts.
+Separate direct observations from hypotheses.
+Assign high, medium, or low confidence to each assessment.
+
+Identify noteworthy hosts and explain why each may be interesting.
+Recommend restrained, proportional next collection only.
+
+Do not treat vendor names as proof of device role.
+Do not invent hostnames, ports, services, operating systems, vulnerabilities, or scan results.
+
+Group hosts into these sections:
+
+1. High-priority candidates
+2. Medium-priority candidates
+3. Likely routine/lower-priority devices
+4. Insufficiently identified hosts
+
+Each discovered host must appear in exactly one of those four primary groups.
+The four primary groups are mutually exclusive.
+Place each host according to its most operationally useful classification.
+Routine hosts sharing a clear vendor or device-family pattern may be summarized together rather than described individually.
+No discovered host should be silently omitted.
+
+Finish with a concise, machine-friendly Operator shortlist.
+The final Operator shortlist may repeat selected hosts from the primary groups.
+
+The Operator shortlist must use this exact structure:
+
+Operator shortlist
+
+1. 192.0.2.10
+   Reason: <short reason>
+   Next step: <restrained next collection step>
+
+2. 192.0.2.11
+   Reason: <short reason>
+   Next step: <restrained next collection step>
+
+Operator shortlist rules:
+- Each numbered shortlist item must contain exactly one host/IP.
+- The first line of each numbered item must contain only the selected IP after the number.
+- Do not combine multiple hosts/IPs on one numbered shortlist item.
+- If multiple hosts share the same reason, create separate numbered entries with repeated or abbreviated reasoning.
+- Keep the shortlist concise and selector-friendly.
+- Do not use grouped shortlist entries such as "Host IPs: a and b".
+
+Output requirements:
+
+Return the entire review inside one fenced code block labeled text.
+Place no commentary, introduction, or conclusion outside that code block.
+Use no additional fenced code blocks inside the response.
+Represent any commands or examples as ordinary indented plain text.
