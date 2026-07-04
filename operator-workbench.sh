@@ -3913,7 +3913,6 @@ run_operator_inventory_stage() {
 
 	while true; do
 		printf '%s\n\n' 'Operator Inventory Stage'
-		printf '%s\n' 'Select a host to inventory:'
 
 		selected_host="$("$select_scan_host_helper" --scan "$scan_dir")"
 		select_status=$?

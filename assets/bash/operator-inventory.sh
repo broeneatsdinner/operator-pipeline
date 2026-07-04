@@ -622,8 +622,92 @@ append_summary() {
 
 review_tmp="${temp_dir}/review-map.txt"
 
+trim_review_space() {
+	local value="$1"
+
+	value="${value#"${value%%[![:space:]]*}"}"
+	value="${value%"${value##*[![:space:]]}"}"
+	printf '%s\n' "$value"
+}
+
+lower_review_text() {
+	printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+review_priority_from_heading() {
+	local raw="$1"
+	local normalized
+
+	normalized="$(trim_review_space "$raw")"
+	normalized="${normalized#\#}"
+	normalized="${normalized#\#}"
+	normalized="${normalized#\#}"
+	normalized="$(trim_review_space "$normalized")"
+	case "$normalized" in
+		[0-9]*.*)
+			normalized="${normalized#*.}"
+			normalized="$(trim_review_space "$normalized")"
+			;;
+	esac
+	normalized="${normalized%:}"
+	normalized="$(lower_review_text "$normalized")"
+
+	case "$normalized" in
+		high|high-priority\ candidates|high\ priority\ candidates)
+			printf '%s\n' "high"
+			return 0
+			;;
+		medium|medium-priority\ candidates|medium\ priority\ candidates)
+			printf '%s\n' "medium"
+			return 0
+			;;
+		low|likely\ routine/lower-priority\ devices|likely\ routine/lower\ priority\ devices|likely\ routine\ lower-priority\ devices|likely\ routine\ lower\ priority\ devices)
+			printf '%s\n' "low"
+			return 0
+			;;
+		tricky\ to\ know|insufficiently\ identified\ hosts)
+			printf '%s\n' "tricky to know"
+			return 0
+			;;
+	esac
+
+	return 1
+}
+
+review_line_item_ip() {
+	local raw="$1"
+	local trimmed rest maybe_ip
+
+	trimmed="$(trim_review_space "$raw")"
+	case "$trimmed" in
+		[0-9]*.*)
+			rest="${trimmed#*.}"
+			rest="$(trim_review_space "$rest")"
+			;;
+		-\ *|\*\ *)
+			rest="${trimmed#?}"
+			rest="$(trim_review_space "$rest")"
+			;;
+		Host:\ *)
+			rest="${trimmed#Host:}"
+			rest="$(trim_review_space "$rest")"
+			;;
+		*)
+			rest="$trimmed"
+			;;
+	esac
+
+	maybe_ip="${rest%%[!0-9.]*}"
+	if is_ipv4 "$maybe_ip"; then
+		printf '%s\n' "$maybe_ip"
+		return 0
+	fi
+
+	return 1
+}
+
 build_review_map() {
-	local in_shortlist='no' current_ip='' current_desc='' pending_label='' line trimmed label value maybe_ip rest
+	local in_review='no' current_priority='' current_ip='' current_desc='' pending_label='' line trimmed label value maybe_ip heading
 
 	: > "$review_tmp"
 	[[ -f "$review_response_file" ]] || return 0
@@ -635,47 +719,67 @@ build_review_map() {
 	}
 
 	while IFS= read -r line || [[ -n "$line" ]]; do
-		if [[ "$in_shortlist" != "yes" ]]; then
+		heading="$(review_priority_from_heading "$line" || true)"
+		if [[ -n "$heading" ]]; then
+			flush_review
+			in_review='yes'
+			current_priority="$heading"
+			current_ip=''
+			current_desc=''
+			pending_label=''
+			continue
+		fi
+
+		if [[ "$in_review" != "yes" ]]; then
 			case "$line" in
 				*[Oo][Pp][Ee][Rr][Aa][Tt][Oo][Rr]\ [Ss][Hh][Oo][Rr][Tt][Ll][Ii][Ss][Tt]*)
-					in_shortlist='yes'
+					in_review='yes'
+					current_priority=''
 					;;
 			esac
 			continue
 		fi
 
 		case "$line" in
-			[0-9]*.*)
-				rest="${line#*.}"
-				rest="${rest#"${rest%%[![:space:]]*}"}"
-				maybe_ip="${rest%%[!0-9.]*}"
+			'')
+				;;
+			*)
+				maybe_ip="$(review_line_item_ip "$line" || true)"
 				if is_ipv4 "$maybe_ip"; then
 					flush_review
 					current_ip="$maybe_ip"
-					current_desc=''
-					pending_label=''
-				fi
-				;;
-			[[:space:]]*Reason:*|[[:space:]]*Why:*|[[:space:]]*Next:*|[[:space:]]*Next\ step:*|[[:space:]]*Confidence:*)
-				trimmed="${line#"${line%%[![:space:]]*}"}"
-				label="${trimmed%%:*}"
-				value="${trimmed#*:}"
-				value="${value#"${value%%[![:space:]]*}"}"
-				if [[ -n "$value" ]]; then
-					current_desc="${current_desc}${current_desc:+|}${label}: ${value}"
-					pending_label=''
-				else
-					pending_label="$label"
-				fi
-				;;
-			[[:space:]]*)
-				if [[ -n "$pending_label" ]]; then
-					value="${line#"${line%%[![:space:]]*}"}"
-					if [[ -n "$value" ]]; then
-						current_desc="${current_desc}${current_desc:+|}${pending_label}: ${value}"
-						pending_label=''
+					if [[ -n "$current_priority" ]]; then
+						current_desc="Priority: $current_priority"
+					else
+						current_desc=''
 					fi
+					pending_label=''
+					continue
 				fi
+
+				case "$line" in
+					[[:space:]]*Reason:*|[[:space:]]*Why:*|[[:space:]]*Next:*|[[:space:]]*Next\ step:*|[[:space:]]*Confidence:*)
+						trimmed="${line#"${line%%[![:space:]]*}"}"
+						label="${trimmed%%:*}"
+						value="${trimmed#*:}"
+						value="${value#"${value%%[![:space:]]*}"}"
+						if [[ -n "$value" ]]; then
+							current_desc="${current_desc}${current_desc:+|}${label}: ${value}"
+							pending_label=''
+						else
+							pending_label="$label"
+						fi
+						;;
+					[[:space:]]*)
+						if [[ -n "$pending_label" ]]; then
+							value="${line#"${line%%[![:space:]]*}"}"
+							if [[ -n "$value" ]]; then
+								current_desc="${current_desc}${current_desc:+|}${pending_label}: ${value}"
+								pending_label=''
+							fi
+						fi
+						;;
+				esac
 				;;
 		esac
 	done < "$review_response_file"
@@ -687,7 +791,7 @@ review_for_ip() {
 	local ip="$1"
 
 	[[ -s "$review_tmp" ]] || return 1
-	awk -F '\t' -v ip="$ip" '$1 == ip { print $2; found=1; exit } END { exit found ? 0 : 1 }' "$review_tmp"
+	awk -F '\t' -v ip="$ip" '$1 == ip { review=$2; found=1 } END { if (found) print review; exit found ? 0 : 1 }' "$review_tmp"
 }
 
 transcript_probe_checkbox() {
@@ -750,7 +854,7 @@ emit_review_lines() {
 }
 
 generate_ledger() {
-	local ip='' review='' tags line
+	local ip='' review='' priority_tag='' tags line
 
 	build_review_map
 
@@ -779,7 +883,12 @@ generate_ledger() {
 					ip="${line#Host: }"
 					ip="${ip%%[[:space:]]*}"
 					tags=''
-					if review_for_ip "$ip" >/dev/null 2>&1; then
+					review="$(review_for_ip "$ip" || true)"
+					if [[ "$review" == Priority:\ * ]]; then
+						priority_tag="${review#Priority: }"
+						priority_tag="${priority_tag%%|*}"
+						tags="${tags} [priority: ${priority_tag}]"
+					elif [[ -n "$review" ]]; then
 						tags="${tags} [interesting]"
 					fi
 					if [[ -f "${scan_dir}/inventory/${ip}/transcript.txt" ]]; then

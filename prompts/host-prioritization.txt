@@ -4,47 +4,77 @@ Use the supplied enriched transcript as the only source of observed facts.
 Separate direct observations from hypotheses.
 Assign high, medium, or low confidence to each assessment.
 
-Identify noteworthy hosts and explain why each may be interesting.
+Classify every discovered host and explain why each host belongs in that priority group.
 Recommend restrained, proportional next collection only.
 
 Do not treat vendor names as proof of device role.
 Do not invent hostnames, ports, services, operating systems, vulnerabilities, or scan results.
 
-Group hosts into these sections:
+Group hosts into exactly these priority sections, in this exact order:
 
-1. High-priority candidates
-2. Medium-priority candidates
-3. Likely routine/lower-priority devices
-4. Insufficiently identified hosts
+1. high
+2. medium
+3. low
+4. tricky to know
 
 Each discovered host must appear in exactly one of those four primary groups.
 The four primary groups are mutually exclusive.
 Place each host according to its most operationally useful classification.
-Routine hosts sharing a clear vendor or device-family pattern may be summarized together rather than described individually.
 No discovered host should be silently omitted.
 
-Finish with a concise, machine-friendly Operator shortlist.
-The final Operator shortlist may repeat selected hosts from the primary groups.
+Priority group meanings:
 
-The Operator shortlist must use this exact structure:
+high
+Hosts that appear most likely to deserve early operator attention based on the scan evidence.
 
-Operator shortlist
+medium
+Hosts with some interesting or potentially useful signals, but less urgent than high.
+
+low
+Hosts that appear routine, quiet, expected, or lower-value based on available scan evidence.
+
+tricky to know
+Hosts where the scan does not provide enough information to make a confident priority judgment.
+
+"Tricky to know" is not a synonym for low. It is the uncertainty bucket. A host may be tricky to know because it exposes little information, has ambiguous service data, lacks clear role indicators, or otherwise cannot be confidently prioritized from the first-pass scan alone.
+
+Finish with a concise, machine-friendly Priority groups section.
+The Priority groups section must include every discovered host exactly once.
+Use these exact group headings, capitalization, and order:
+
+Priority groups
+
+high
 
 1. 192.0.2.10
    Reason: <short reason>
    Next step: <restrained next collection step>
 
+medium
+
 2. 192.0.2.11
    Reason: <short reason>
    Next step: <restrained next collection step>
 
-Operator shortlist rules:
-- Each numbered shortlist item must contain exactly one host/IP.
+low
+
+3. 192.0.2.12
+   Reason: <short reason>
+   Next step: <restrained next collection step>
+
+tricky to know
+
+4. 192.0.2.13
+   Reason: <short reason>
+   Next step: <restrained next collection step>
+
+Priority groups rules:
+- Each numbered item must contain exactly one host/IP.
 - The first line of each numbered item must contain only the selected IP after the number.
-- Do not combine multiple hosts/IPs on one numbered shortlist item.
+- Do not combine multiple hosts/IPs on one numbered item.
 - If multiple hosts share the same reason, create separate numbered entries with repeated or abbreviated reasoning.
-- Keep the shortlist concise and selector-friendly.
-- Do not use grouped shortlist entries such as "Host IPs: a and b".
+- Do not use grouped entries such as "Host IPs: a and b".
+- Do not omit lower-value or uncertain hosts from the Priority groups section.
 
 Output requirements:
 

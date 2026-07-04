@@ -34,7 +34,7 @@ Usage:
   ./assets/bash/select-scan-host.sh --list-hosts --scan <scan-dir>
   ./assets/bash/select-scan-host.sh -h|--help
 
-Select a host from the Operator shortlist in a saved scan review response.
+Select a host from the Operator priority review in a saved scan review response.
 EOF
 }
 
@@ -123,6 +123,21 @@ host_disabled=()
 host_metadata_ips=()
 host_metadata_manufacturers=()
 host_metadata_probable_types=()
+
+review_ips=()
+review_priorities=()
+review_descriptions=()
+
+priority_keys=(high medium low "tricky to know")
+priority_review_labels=("High:" "Medium:" "Low:" "Tricky to know:")
+priority_select_labels=(high medium low "tricky to know")
+priority_totals=(0 0 0 0)
+priority_inventoried=(0 0 0 0)
+priority_remaining=(0 0 0 0)
+total_hosts_found=0
+total_hosts_inventoried=0
+total_hosts_remaining=0
+selected_priority=''
 
 first_matching_line_value() {
 	local file="$1"
@@ -252,6 +267,31 @@ trim_leading_space() {
 	printf '%s\n' "$value"
 }
 
+trim_trailing_space() {
+	local value="$1"
+
+	value="${value%"${value##*[![:space:]]}"}"
+	printf '%s\n' "$value"
+}
+
+trim_space() {
+	local value="$1"
+
+	value="$(trim_leading_space "$value")"
+	value="$(trim_trailing_space "$value")"
+	printf '%s\n' "$value"
+}
+
+lower_text() {
+	printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+is_ipv4() {
+	local value="$1"
+
+	[[ "$value" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+}
+
 load_host_metadata() {
 	local scan_dir="$1"
 	local enriched_file="${scan_dir}/transcript-enriched.txt"
@@ -304,6 +344,19 @@ metadata_for_ip() {
 	done
 }
 
+is_discovered_host() {
+	local ip="$1"
+	local idx
+
+	for ((idx = 0; idx < ${#host_metadata_ips[@]}; idx++)); do
+		if [[ "${host_metadata_ips[$idx]}" == "$ip" ]]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
 base_description_for_ip() {
 	local ip="$1"
 	local desc=''
@@ -319,115 +372,357 @@ base_description_for_ip() {
 	printf '%s\n' "$desc"
 }
 
-load_hosts() {
+priority_index() {
+	local priority="$1"
+	local idx
+
+	for ((idx = 0; idx < ${#priority_keys[@]}; idx++)); do
+		if [[ "${priority_keys[$idx]}" == "$priority" ]]; then
+			printf '%s\n' "$idx"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+review_index_for_ip() {
+	local ip="$1"
+	local idx
+
+	for ((idx = 0; idx < ${#review_ips[@]}; idx++)); do
+		if [[ "${review_ips[$idx]}" == "$ip" ]]; then
+			printf '%s\n' "$idx"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+set_review_priority() {
+	local ip="$1"
+	local priority="$2"
+	local idx
+
+	priority_index "$priority" >/dev/null || return 0
+	is_discovered_host "$ip" || return 0
+
+	idx="$(review_index_for_ip "$ip" || true)"
+	if [[ -z "$idx" ]]; then
+		review_ips+=("$ip")
+		review_priorities+=("$priority")
+		review_descriptions+=("")
+	else
+		review_priorities[$idx]="$priority"
+	fi
+}
+
+append_review_description() {
+	local ip="$1"
+	local line="$2"
+	local idx desc
+
+	[[ -n "$ip" && -n "$line" ]] || return 0
+	idx="$(review_index_for_ip "$ip" || true)"
+	[[ -n "$idx" ]] || return 0
+
+	desc="${review_descriptions[$idx]}"
+	review_descriptions[$idx]="$(append_description_line "$desc" "$line")"
+}
+
+review_priority_for_ip() {
+	local ip="$1"
+	local idx
+
+	idx="$(review_index_for_ip "$ip" || true)"
+	if [[ -n "$idx" && -n "${review_priorities[$idx]}" ]]; then
+		printf '%s\n' "${review_priorities[$idx]}"
+	else
+		printf '%s\n' "tricky to know"
+	fi
+}
+
+review_description_for_ip() {
+	local ip="$1"
+	local idx
+
+	idx="$(review_index_for_ip "$ip" || true)"
+	if [[ -n "$idx" ]]; then
+		printf '%s\n' "${review_descriptions[$idx]}"
+	fi
+}
+
+priority_from_heading() {
+	local raw="$1"
+	local normalized
+
+	normalized="$(trim_space "$raw")"
+	normalized="${normalized#\#}"
+	normalized="${normalized#\#}"
+	normalized="${normalized#\#}"
+	normalized="$(trim_space "$normalized")"
+	case "$normalized" in
+		[0-9]*.*)
+			normalized="${normalized#*.}"
+			normalized="$(trim_space "$normalized")"
+			;;
+	esac
+	normalized="${normalized%:}"
+	normalized="$(lower_text "$normalized")"
+
+	case "$normalized" in
+		high|high-priority\ candidates|high\ priority\ candidates)
+			printf '%s\n' "high"
+			return 0
+			;;
+		medium|medium-priority\ candidates|medium\ priority\ candidates)
+			printf '%s\n' "medium"
+			return 0
+			;;
+		low|likely\ routine/lower-priority\ devices|likely\ routine/lower\ priority\ devices|likely\ routine\ lower-priority\ devices|likely\ routine\ lower\ priority\ devices)
+			printf '%s\n' "low"
+			return 0
+			;;
+		tricky\ to\ know|insufficiently\ identified\ hosts)
+			printf '%s\n' "tricky to know"
+			return 0
+			;;
+	esac
+
+	return 1
+}
+
+line_item_ip() {
+	local raw="$1"
+	local trimmed rest maybe_ip
+
+	trimmed="$(trim_space "$raw")"
+	case "$trimmed" in
+		[0-9]*.*)
+			rest="${trimmed#*.}"
+			rest="$(trim_leading_space "$rest")"
+			;;
+		-\ *|\*\ *)
+			rest="${trimmed#?}"
+			rest="$(trim_leading_space "$rest")"
+			;;
+		Host:\ *)
+			rest="${trimmed#Host:}"
+			rest="$(trim_leading_space "$rest")"
+			;;
+		*)
+			rest="$trimmed"
+			;;
+	esac
+
+	maybe_ip="${rest%%[!0-9.]*}"
+	if is_ipv4 "$maybe_ip"; then
+		printf '%s\n' "$maybe_ip"
+		return 0
+	fi
+
+	return 1
+}
+
+parse_description_field() {
+	local raw_line="$1"
+	local trimmed field_label field_value
+
+	parsed_field_label=''
+	parsed_field_value=''
+	trimmed="$(trim_leading_space "$raw_line")"
+	field_label="${trimmed%%:*}"
+
+	case "$field_label" in
+		Reason|Why|Confidence|Next|Next\ step)
+			field_value="${trimmed#*:}"
+			parsed_field_label="$field_label"
+			parsed_field_value="$(trim_leading_space "$field_value")"
+			return 0
+			;;
+	esac
+
+	return 1
+}
+
+load_review_priorities() {
 	local scan_dir="$1"
 	local response_file="${scan_dir}/transcript-review-response.txt"
-	local in_shortlist='no'
+	local current_priority=''
 	local current_ip=''
-	local current_description=''
 	local pending_field_label=''
-	local line rest maybe_ip desc
+	local line maybe_ip desc heading rest
 
 	if [[ ! -f "$response_file" ]]; then
 		error "Required review response not found: ${response_file#"$script_dir"/}"
 		return 1
 	fi
 
-	load_host_metadata "$scan_dir"
-
-	is_host_inventoried() {
-		local ip="$1"
-
-		[[ -f "${scan_dir}/inventory/${ip}/transcript.txt" ]]
-	}
-
-	is_host_inventorying() {
-		local ip="$1"
-
-		[[ -f "${scan_dir}/inventory/${ip}/.operator-workbench-inventorying" ]]
-	}
-
-	is_host_inventory_failed() {
-		local ip="$1"
-
-		[[ -f "${scan_dir}/inventory/${ip}/.operator-workbench-inventory-failed" ]]
-	}
-
 	parsed_field_label=''
 	parsed_field_value=''
+	review_ips=()
+	review_priorities=()
+	review_descriptions=()
 
-	parse_description_field() {
-		local raw_line="$1"
-		local trimmed field_label field_value
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		heading="$(priority_from_heading "$line" || true)"
+		if [[ -n "$heading" ]]; then
+			current_priority="$heading"
+			current_ip=''
+			pending_field_label=''
+			continue
+		fi
 
-		parsed_field_label=''
-		parsed_field_value=''
-		trimmed="$(trim_leading_space "$raw_line")"
-		field_label="${trimmed%%:*}"
+		[[ -n "$current_priority" ]] || continue
 
-		case "$field_label" in
-			Reason|Why|Confidence|Next|Next\ step)
-				field_value="${trimmed#*:}"
-				parsed_field_label="$field_label"
-				parsed_field_value="$(trim_leading_space "$field_value")"
-				return 0
+		case "$line" in
+			'')
+				;;
+			*)
+				maybe_ip="$(line_item_ip "$line" || true)"
+				if [[ -n "$maybe_ip" ]]; then
+					set_review_priority "$maybe_ip" "$current_priority"
+					if is_discovered_host "$maybe_ip"; then
+						current_ip="$maybe_ip"
+					else
+						current_ip=''
+					fi
+					pending_field_label=''
+					continue
+				fi
+
+				if parse_description_field "$line"; then
+					if [[ -n "$parsed_field_value" ]]; then
+						desc="${parsed_field_label}: ${parsed_field_value}"
+						append_review_description "$current_ip" "$desc"
+						pending_field_label=''
+					else
+						pending_field_label="$parsed_field_label"
+					fi
+				elif [[ -n "$pending_field_label" && "$line" == [[:space:]]* ]]; then
+					rest="$(trim_leading_space "$line")"
+					if [[ -n "$rest" ]]; then
+						desc="${pending_field_label}: ${rest}"
+						append_review_description "$current_ip" "$desc"
+						pending_field_label=''
+					fi
+				fi
 				;;
 		esac
+	done < "$response_file"
+}
 
-		return 1
-	}
+is_host_inventoried() {
+	local scan_dir="$1"
+	local ip="$2"
 
-	flush_host() {
-		local existing_ip
-		local label description inventory_rel
-		local inventoried='no'
-		local inventorying='no'
-		local failed='no'
-		local disabled='0'
+	[[ -f "${scan_dir}/inventory/${ip}/transcript.txt" ]]
+}
 
-		if [[ -z "$current_ip" ]]; then
-			return 0
+is_host_inventorying() {
+	local scan_dir="$1"
+	local ip="$2"
+
+	[[ -f "${scan_dir}/inventory/${ip}/.operator-workbench-inventorying" ]]
+}
+
+is_host_inventory_failed() {
+	local scan_dir="$1"
+	local ip="$2"
+
+	[[ -f "${scan_dir}/inventory/${ip}/.operator-workbench-inventory-failed" ]]
+}
+
+compute_priority_counts() {
+	local scan_dir="$1"
+	local ip priority idx
+
+	priority_totals=(0 0 0 0)
+	priority_inventoried=(0 0 0 0)
+	priority_remaining=(0 0 0 0)
+	total_hosts_found=${#host_metadata_ips[@]}
+	total_hosts_inventoried=0
+
+	for ip in "${host_metadata_ips[@]}"; do
+		priority="$(review_priority_for_ip "$ip")"
+		idx="$(priority_index "$priority" || priority_index "tricky to know")"
+		priority_totals[$idx]=$((priority_totals[$idx] + 1))
+		if is_host_inventoried "$scan_dir" "$ip"; then
+			total_hosts_inventoried=$((total_hosts_inventoried + 1))
+			priority_inventoried[$idx]=$((priority_inventoried[$idx] + 1))
+		fi
+	done
+
+	total_hosts_remaining=$((total_hosts_found - total_hosts_inventoried))
+	for ((idx = 0; idx < ${#priority_keys[@]}; idx++)); do
+		priority_remaining[$idx]=$((priority_totals[$idx] - priority_inventoried[$idx]))
+	done
+}
+
+prepare_review_model() {
+	local scan_dir="$1"
+
+	load_host_metadata "$scan_dir"
+	load_review_priorities "$scan_dir"
+	compute_priority_counts "$scan_dir"
+}
+
+load_hosts() {
+	local scan_dir="$1"
+	local priority_filter="${2:-}"
+	local visibility="${3:-$host_visibility}"
+	local ip priority label description review_description inventory_rel
+	local inventoried inventorying failed disabled
+
+	host_labels=()
+	host_descriptions=()
+	host_values=()
+	host_disabled=()
+
+	for ip in "${host_metadata_ips[@]}"; do
+		priority="$(review_priority_for_ip "$ip")"
+		if [[ -n "$priority_filter" && "$priority" != "$priority_filter" ]]; then
+			continue
 		fi
 
-		if ((${#host_values[@]} > 0)); then
-			for existing_ip in "${host_values[@]}"; do
-				if [[ "$existing_ip" == "$current_ip" ]]; then
-					return 0
-				fi
-			done
-		fi
+		inventoried='no'
+		inventorying='no'
+		failed='no'
+		disabled='0'
 
-		if is_host_inventory_failed "$current_ip"; then
+		if is_host_inventory_failed "$scan_dir" "$ip"; then
 			failed='yes'
-		elif is_host_inventorying "$current_ip"; then
+		elif is_host_inventorying "$scan_dir" "$ip"; then
 			inventorying='yes'
-		elif is_host_inventoried "$current_ip"; then
+		elif is_host_inventoried "$scan_dir" "$ip"; then
 			inventoried='yes'
 		fi
 
-		if [[ "$list_hosts" == "yes" ]]; then
-			case "$host_visibility" in
-				uninventoried)
-					if [[ "$inventoried" == "yes" ]]; then
-						return 0
-					fi
-					;;
-				inventoried)
-					if [[ "$inventoried" != "yes" ]]; then
-						return 0
-					fi
-					;;
-			esac
-		elif [[ "$host_visibility" == "inventoried" && "$inventoried" != "yes" ]]; then
-					return 0
+		case "$visibility" in
+			uninventoried)
+				if [[ "$inventoried" == "yes" ]]; then
+					continue
+				fi
+				;;
+			inventoried)
+				if [[ "$inventoried" != "yes" ]]; then
+					continue
+				fi
+				;;
+		esac
+
+		label="$ip"
+		description="$(base_description_for_ip "$ip")"
+		review_description="$(review_description_for_ip "$ip")"
+		if [[ -n "$review_description" ]]; then
+			description="$(append_description_line "$description" "$review_description")"
 		fi
 
-		label="$current_ip"
-		description="$current_description"
 		if [[ "$inventoried" == "yes" ]]; then
 			label="${label} [inventoried]"
 			disabled='1'
-			inventory_rel="${scan_dir#"$script_dir"/}/inventory/${current_ip}/transcript.txt"
+			inventory_rel="${scan_dir#"$script_dir"/}/inventory/${ip}/transcript.txt"
 			description="$(append_description_line "$description" "Inventory: $inventory_rel")"
 		elif [[ "$inventorying" == "yes" ]]; then
 			label="${label} [inventorying]"
@@ -437,81 +732,21 @@ load_hosts() {
 		fi
 
 		host_labels+=("$label")
-		host_values+=("$current_ip")
+		host_values+=("$ip")
 		host_descriptions+=("$description")
 		host_disabled+=("$disabled")
-	}
-
-	while IFS= read -r line || [[ -n "$line" ]]; do
-		if [[ "$in_shortlist" != "yes" ]]; then
-			case "$line" in
-				*[Oo][Pp][Ee][Rr][Aa][Tt][Oo][Rr]\ [Ss][Hh][Oo][Rr][Tt][Ll][Ii][Ss][Tt]*)
-					in_shortlist='yes'
-					;;
-			esac
-			continue
-		fi
-
-		case "$line" in
-			[0-9]*.*)
-				rest="${line#*.}"
-				rest="$(trim_leading_space "$rest")"
-				maybe_ip="${rest%%[!0-9.]*}"
-
-				if [[ "$maybe_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-					flush_host
-					current_ip="$maybe_ip"
-					current_description="$(base_description_for_ip "$current_ip")"
-					pending_field_label=''
-				fi
-				;;
-			'')
-				;;
-			*)
-				if [[ -z "$current_ip" ]]; then
-					continue
-				fi
-
-				if parse_description_field "$line"; then
-					if [[ -n "$parsed_field_value" ]]; then
-						desc="${parsed_field_label}: ${parsed_field_value}"
-						current_description="$(append_description_line "$current_description" "$desc")"
-						pending_field_label=''
-					else
-						pending_field_label="$parsed_field_label"
-					fi
-				elif [[ -n "$pending_field_label" && "$line" == [[:space:]]* ]]; then
-					rest="$(trim_leading_space "$line")"
-					if [[ -n "$rest" ]]; then
-						desc="${pending_field_label}: ${rest}"
-						current_description="$(append_description_line "$current_description" "$desc")"
-						pending_field_label=''
-					fi
-				elif [[ "$line" == [A-Za-z]* ]]; then
-					break
-				fi
-				;;
-		esac
-	done < "$response_file"
-
-	if [[ "$in_shortlist" != "yes" ]]; then
-		error "No Operator shortlist section found in: ${response_file#"$script_dir"/}"
-		return 1
-	fi
-
-	flush_host
+	done
 
 	if ((${#host_values[@]} == 0)); then
-		case "$host_visibility" in
+		case "$visibility" in
 			uninventoried)
-				notice "No un-inventoried shortlist hosts remain for this scan."
-				notice "Returning to operator workbench..."
+				notice "No un-inventoried hosts remain for this scan."
 				;;
 			inventoried)
-				error "No inventoried shortlist hosts found for this scan."
+				error "No inventoried hosts found for this scan."
 				;;
 			*)
-				error "No shortlist host entries found in: ${response_file#"$script_dir"/}"
+				notice "No hosts found in this priority set."
 				;;
 		esac
 		return 1
@@ -550,6 +785,71 @@ render_host_selector() {
 	selector_render_logical_items "$selected"
 }
 
+render_priority_selector() {
+	local selected="$1"
+	local idx marker value
+	local top_count_width=2
+	local inventoried_count_width=2
+	local total_count_width=4
+	local remaining_count_width=4
+	local value_length
+
+	for value in "$total_hosts_found" "$total_hosts_inventoried" "$total_hosts_remaining"; do
+		value_length="${#value}"
+		if ((value_length > top_count_width)); then
+			top_count_width="$value_length"
+		fi
+	done
+
+	for ((idx = 0; idx < ${#priority_keys[@]}; idx++)); do
+		value_length="${#priority_inventoried[$idx]}"
+		if ((value_length > inventoried_count_width)); then
+			inventoried_count_width="$value_length"
+		fi
+		value_length="${#priority_totals[$idx]}"
+		if ((value_length > total_count_width)); then
+			total_count_width="$value_length"
+		fi
+		value_length="${#priority_remaining[$idx]}"
+		if ((value_length > remaining_count_width)); then
+			remaining_count_width="$value_length"
+		fi
+	done
+
+	printf '%-20s %*d\n' 'Hosts found:' "$top_count_width" "$total_hosts_found"
+	printf '%-20s %*d\n' 'Hosts inventoried:' "$top_count_width" "$total_hosts_inventoried"
+	printf '%-20s %*d\n' 'Hosts remaining:' "$top_count_width" "$total_hosts_remaining"
+	printf '\n'
+	printf 'Priority review:\n'
+	for ((idx = 0; idx < ${#priority_keys[@]}; idx++)); do
+		printf '  %-19s%*d inventoried %*d total\n' \
+			"${priority_review_labels[$idx]}" \
+			"$inventoried_count_width" \
+			"${priority_inventoried[$idx]}" \
+			"$total_count_width" \
+			"${priority_totals[$idx]}"
+	done
+	printf '\n'
+	printf 'Select which set of hosts you want to dig into next.\n'
+	printf '\n'
+	for ((idx = 0; idx < ${#priority_keys[@]}; idx++)); do
+		if ((idx == selected)); then
+			marker='>'
+		else
+			marker=' '
+		fi
+		printf '  %s %-17s%*d inventoried %*d total %*d remaining\n' \
+			"$marker" \
+			"${priority_select_labels[$idx]}" \
+			"$inventoried_count_width" \
+			"${priority_inventoried[$idx]}" \
+			"$total_count_width" \
+			"${priority_totals[$idx]}" \
+			"$remaining_count_width" \
+			"${priority_remaining[$idx]}"
+	done
+}
+
 selector_should_use_paged() {
 	local -i item_count total_lines
 
@@ -562,6 +862,7 @@ selector_should_use_paged() {
 run_selector() {
 	local title="$1"
 	local render_func="$2"
+	local key_mode="${3:-main}"
 	local mode="$selector_mode"
 
 	if [[ "$mode" == "auto" ]]; then
@@ -574,10 +875,10 @@ run_selector() {
 
 	case "$mode" in
 		region)
-			selector_select_region main "$render_func" "" 0 "${#selector_item_labels[@]}" >&2
+			selector_select_region "$key_mode" "$render_func" "" 0 "${#selector_item_labels[@]}" >&2
 			;;
 		paged)
-			selector_select_fullscreen_paginated main "$title" "" "" 0 >&2
+			selector_select_fullscreen_paginated "$key_mode" "$title" "" "" 0 >&2
 			;;
 	esac
 }
@@ -589,7 +890,7 @@ select_scan() {
 	selector_item_descriptions=("${scan_descriptions[@]}")
 	selector_item_disabled=()
 
-	if ! run_selector "Select scan:" render_scan_selector; then
+	if ! run_selector "Select scan:" render_scan_selector main; then
 		case "$selector_result" in
 			"$SELECTOR_RESULT_QUIT"|"$SELECTOR_RESULT_INTERRUPT")
 				error "Scan selection cancelled."
@@ -606,6 +907,31 @@ select_scan() {
 	printf '%s\n' "${scan_paths[$selected_index]}"
 }
 
+select_priority() {
+	local selected_index
+
+	selector_item_labels=("${priority_select_labels[@]}")
+	selector_item_descriptions=("" "" "" "")
+	selector_item_disabled=(0 0 0 0)
+
+	if ! selector_select_region main render_priority_selector "" 0 "${#priority_select_labels[@]}" >&2; then
+		case "$selector_result" in
+			"$SELECTOR_RESULT_QUIT"|"$SELECTOR_RESULT_INTERRUPT")
+				notice "Returning to operator workbench..."
+				return 1
+				;;
+			*)
+				error "No priority set selected."
+				return 1
+				;;
+		esac
+	fi
+
+	selected_index="$selector_index"
+	selected_priority="${priority_keys[$selected_index]}"
+	return 0
+}
+
 select_host() {
 	local selected_index
 
@@ -613,8 +939,11 @@ select_host() {
 	selector_item_descriptions=("${host_descriptions[@]}")
 	selector_item_disabled=("${host_disabled[@]}")
 
-	if ! run_selector "Select host:" render_host_selector; then
+	if ! run_selector "Select host:" render_host_selector nested; then
 		case "$selector_result" in
+			"$SELECTOR_RESULT_BACK")
+				return 10
+				;;
 			"$SELECTOR_RESULT_QUIT"|"$SELECTOR_RESULT_INTERRUPT")
 				notice "Returning to operator workbench..."
 				return 1
@@ -630,6 +959,24 @@ select_host() {
 	printf '%s\n' "${host_values[$selected_index]}"
 }
 
+select_priority_then_host() {
+	local host_status
+
+	while true; do
+		select_priority || return 1
+		load_hosts "$selected_scan" "$selected_priority" all || continue
+		select_host
+		host_status=$?
+		if [[ "$host_status" -eq 0 ]]; then
+			return 0
+		fi
+		if [[ "$host_status" -eq 10 ]]; then
+			continue
+		fi
+		return "$host_status"
+	done
+}
+
 if [[ "$list_scans" == "yes" ]]; then
 	load_scans || exit 1
 	print_scans
@@ -643,11 +990,12 @@ else
 	selected_scan="$(select_scan)" || exit 1
 fi
 
-load_hosts "$selected_scan" || exit 1
+prepare_review_model "$selected_scan" || exit 1
 
 if [[ "$list_hosts" == "yes" ]]; then
+	load_hosts "$selected_scan" "" "$host_visibility" || exit 1
 	print_hosts
 	exit 0
 fi
 
-select_host
+select_priority_then_host
