@@ -8,6 +8,8 @@ The operator still decides what to do.
 
 The workbench carries the procedural burden.
 
+<br><br>
+
 <a href="https://broeneatsdinner.github.io/operator-pipeline/">
   <img
     src="./assets/buttons/read-the-operator-pipeline-manual-dark-8px-high-quality.webp"
@@ -17,6 +19,8 @@ The workbench carries the procedural burden.
 </a>
 
 **[Read the Operator Pipeline manual →](https://broeneatsdinner.github.io/operator-pipeline/)**
+
+<br><br>
 
 ## Field posture
 
