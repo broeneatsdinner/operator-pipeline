@@ -1,5 +1,8 @@
 title: Operator Pipeline
 description: A public manual for a stateful operator workbench.
+url: "https://broeneatsdinner.github.io"
+baseurl: "/operator-pipeline"
+repository_url: "https://github.com/broeneatsdinner/operator-pipeline"
 markdown: kramdown
 permalink: pretty
 defaults:
