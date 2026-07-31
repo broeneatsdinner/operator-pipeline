@@ -1,0 +1,9 @@
+title: Operator Pipeline
+description: A public manual for a stateful operator workbench.
+markdown: kramdown
+permalink: pretty
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

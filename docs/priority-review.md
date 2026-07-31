@@ -1,4 +1,9 @@
-# Priority review
+---
+title: Priority Review
+summary: The model classifies discovered terrain; the operator retains the authority to choose the working set.
+layout: reference
+permalink: /priority-review/
+---
 
 `operator-pipeline` uses the review step to organize discovered hosts without giving the model authority over what the operator is allowed to inspect.
 

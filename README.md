@@ -1,212 +1,61 @@
 # operator-pipeline
 
-operator-pipeline is a local operator workbench for security-assessment discovery workflows.
+operator-pipeline is a local operator workbench for authorized security-assessment discovery workflows.
 
-It is not a scanner wrapper, and it is not an attempt to automate away operator judgment. The scanner is only one instrument inside the workflow. The product is the disciplined session lifecycle around the scan.
-
-operator-pipeline exists for the parts of assessment work that can become stressful precisely because they are repetitive: remembering the baseline, changing identity state carefully, choosing a quiet first pass, preserving the right artifacts, restoring the environment, and knowing when the engagement is cleanly closed.
+It is not a scanner wrapper, and it is not an attempt to automate away operator judgment. The scanner is one instrument inside the workflow. The product is the disciplined session lifecycle around the scan: arrive with a baseline, observe carefully, preserve what matters, restore the environment, and know when the engagement is actually closed.
 
 The operator still decides what to do.
 
 The workbench carries the procedural burden.
 
----
+**[Read the Operator Pipeline manual →](docs/index.md)**
 
 ## Field posture
 
-At one point, I likened this to walking into a train station, taking a seat, and opening a fresh notebook that is unbranded and unknown by any onlookers where it could have been purchased.
+Think of arriving at a train station with a fresh notebook and a fresh pen:
+unbranded, unknown to the room, and ready to record the trains that pass
+through. That is the posture this project tries to preserve—arrive cleanly,
+observe carefully, record what matters, and leave with the notes the engagement
+required.
 
-Using a fresh pen.
+## What is here
 
-Meticulously recording the trains passing through the station.
-
-That is the posture operator-pipeline is trying to preserve: arrive cleanly, observe carefully, record what matters, and leave with the notes the engagement required.
-
----
-
-## What the workbench does
-
-The current workbench supports a verified end-to-end lifecycle:
-
-1. capture the conductor baseline;
-2. prepare a temporary conductor identity;
-3. prepare a temporary collector identity;
-4. run collector-side discovery;
-5. preserve generated collection artifacts;
-6. restore the collector;
-7. restore the conductor;
-8. record the completed session;
-9. prepare a fresh baseline for the next engagement.
-
-This turns a fragile sequence of terminal operations into a reversible, inspectable operator session.
-
----
-
-## Why it exists
-
-Assessment work often fails at the seams.
-
-The scan command itself is rarely the whole problem. The harder parts are the state around the command:
-
-- What identity was the conductor using before the session started?
-- What identity was the collector using?
-- Was discovery run from the intended endpoint?
-- Was the first pass quiet enough for the engagement?
-- Where did the output go?
-- What still needs review?
-- Was the collector restored?
-- Was the conductor restored?
-- Is the session actually complete?
-
-operator-pipeline was built around those seams.
-
-It gives the operator a workbench for moving through the engagement deliberately instead of carrying the whole procedure in terminal memory.
-
----
-
-## Current repository state
-
-This public repository contains the sanitized workbench foundation:
+The public workbench foundation includes a stateful operator console, public-safe
+helpers, review prompts, a synthetic interface demo, and placeholders for the
+runtime material that must remain local.
 
 ```text
-operator-workbench.sh
-assets/
-demos/
-log/
-prompts/
-scans/
-vendor/
+operator-workbench.sh  # lifecycle entrypoint
+assets/                # focused helpers
+demos/                 # synthetic, non-network demonstrations
+docs/                  # canonical manual and Pages source
+log/                   # ignored runtime records; one sanitized example
+scans/                 # ignored collection artifacts
+prompts/               # review instructions
 ```
 
-The main entrypoint is:
-
-```sh
-./operator-workbench.sh
-```
-
-The current public tree includes the workbench and helper components needed to express the implemented workflow, plus public-safe runtime placeholders and examples.
-
----
-
-## Runtime layout
-
-Generated runtime material is separated by purpose:
-
-```text
-log/
-```
-
-Generated operational records and state examples.
-
-```text
-scans/
-```
-
-Generated collection artifacts.
-
-```text
-prompts/
-```
-
-Review prompts used by enrichment and operator handoff components.
-
-```text
-demos/
-```
-
-Public-safe demonstrations that use synthetic data.
-
-The public repository intentionally keeps `log/` and `scans/` mostly empty. Real assessment records do not belong in the public tree.
-
----
-
-## Demo
-
-The current demo is a non-network visual demonstration of the active inventory row:
+Start with the manual’s [lifecycle](docs/lifecycle.md), then read the
+[priority-review boundary](docs/priority-review.md). To see one public-safe
+interface slice, run:
 
 ```sh
 ./demos/inventory-active-row-demo.sh
 ```
 
-It uses synthetic progress states. It does not run Nmap, read scan directories, or invoke a live workbench workflow.
+It uses synthetic progress states. It does not run Nmap, read scan directories,
+or invoke a live workbench workflow.
 
-This demo is not the full proof of the operator-pipeline lifecycle. It is a public-safe visual slice of one operator-facing surface.
+## Public boundary
 
----
+This is a sanitized public foundation, not an engagement archive or a map of a
+real environment. Real hosts, identities, network details, scan artifacts,
+runtime logs, private notes, terminal captures, credentials, and secrets do not
+belong here. The manual explains the project’s [scope and evidence boundary](docs/scope-and-evidence.md).
 
-## Implemented and verified
+## Status
 
-The private workbench environment has completed a verified lifecycle including:
-
-- conductor baseline capture;
-- conductor temporary identity;
-- collector temporary identity;
-- collector-side discovery;
-- collector restoration;
-- conductor restoration;
-- completed-session recording;
-- fresh baseline preparation.
-
-Several implementation fixes came directly from exercising the real workflow:
-
-- noninteractive collector SSH commands now avoid inheriting interactive `RemoteCommand` / TTY behavior from local SSH configuration;
-- collector restore verification retries briefly after reconnect or address changes;
-- completed-session UX clearly tells the operator when no immediate action is required;
-- generated conductor runtime state uses flat files under `log/` rather than writing operational state into private reference directories.
-
----
-
-## Public/private boundary
-
-This repository is a public, sanitized release of the workbench foundation.
-
-It intentionally excludes:
-
-- real collector aliases;
-- real conductor or collector hostnames;
-- real MAC addresses;
-- private usernames;
-- local SSH configuration paths;
-- real scan artifacts;
-- generated runtime logs from real sessions;
-- private notes;
-- screenshots or terminal captures from private environments;
-- credentials, tokens, keys, or secrets;
-- personal, client, home, school, family, or engagement-specific material.
-
-The public hostname-generation corpus is also intentionally demonstrative. It is not the private operational corpus used for real engagements.
-
----
-
-## What this demonstrates
-
-operator-pipeline demonstrates more than command automation.
-
-It shows a way of treating assessment work as a stateful operator lifecycle:
-
-- baseline before mutation;
-- temporary posture before collection;
-- quiet discovery before escalation;
-- artifact capture before interpretation;
-- restoration before closure;
-- session records before walking away.
-
-The goal is not to make the operator careless.
-
-The goal is to let the operator reserve attention for judgment while the workbench carries the repeatable state-management burden.
-
----
-
-## Roadmap
-
-Future public work may include:
-
-- a fuller deterministic lifecycle demo;
-- diagrams of conductor / collector responsibilities;
-- expanded runtime-layout documentation;
-- public-safe screenshots or terminal recordings;
-- clearer local configuration examples;
-- normalized report artifacts;
-- additional release-audit tooling.
-
-Those items are not presented here as complete. The current public release is the sanitized workbench foundation and verified lifecycle story.
+The public code expresses an implemented workbench lifecycle and public-safe
+helpers. The project has also exercised a complete lifecycle in a separate
+private working environment; that evidence does not make private artifacts or
+topology public. Read the [manual’s evidence notes](docs/scope-and-evidence.md)
+for the distinction between implemented behavior, the synthetic demo, and future work.

@@ -1,0 +1,24 @@
+- title: Start Here
+  items:
+    - title: Overview
+      url: /
+    - title: Lifecycle
+      url: /lifecycle/
+- title: Operator Manual
+  items:
+    - title: Priority Review
+      url: /priority-review/
+    - title: Interface and Demo
+      url: /interface-and-demo/
+    - title: Artifacts and Closure
+      url: /artifacts-and-closure/
+- title: System Reference
+  items:
+    - title: Public Architecture
+      url: /architecture/
+    - title: Scope and Evidence
+      url: /scope-and-evidence/
+- title: Project Record
+  items:
+    - title: Timeline
+      url: /timeline/
