@@ -8,7 +8,7 @@ The operator still decides what to do.
 
 The workbench carries the procedural burden.
 
-**[Read the Operator Pipeline manual →](docs/index.md)**
+**[Read the Operator Pipeline manual →](https://broeneatsdinner.github.io/operator-pipeline/)**
 
 ## Field posture
 
@@ -34,8 +34,8 @@ scans/                 # ignored collection artifacts
 prompts/               # review instructions
 ```
 
-Start with the manual’s [lifecycle](docs/lifecycle.md), then read the
-[priority-review boundary](docs/priority-review.md). To see one public-safe
+Start with the manual’s [lifecycle](https://broeneatsdinner.github.io/operator-pipeline/lifecycle/), then read the
+[priority-review boundary](https://broeneatsdinner.github.io/operator-pipeline/priority-review/). To see one public-safe
 interface slice, run:
 
 ```sh
@@ -50,12 +50,12 @@ or invoke a live workbench workflow.
 This is a sanitized public foundation, not an engagement archive or a map of a
 real environment. Real hosts, identities, network details, scan artifacts,
 runtime logs, private notes, terminal captures, credentials, and secrets do not
-belong here. The manual explains the project’s [scope and evidence boundary](docs/scope-and-evidence.md).
+belong here. The manual explains the project’s [scope and evidence boundary](https://broeneatsdinner.github.io/operator-pipeline/scope-and-evidence/).
 
 ## Status
 
 The public code expresses an implemented workbench lifecycle and public-safe
 helpers. The project has also exercised a complete lifecycle in a separate
 private working environment; that evidence does not make private artifacts or
-topology public. Read the [manual’s evidence notes](docs/scope-and-evidence.md)
+topology public. Read the [manual’s evidence notes](https://broeneatsdinner.github.io/operator-pipeline/scope-and-evidence/)
 for the distinction between implemented behavior, the synthetic demo, and future work.
