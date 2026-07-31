@@ -1,6 +1,6 @@
 ---
 title: Timeline
-summary: The public project record: foundation first, then a sharper boundary around operator authority.
+summary: "The public project record: foundation first, then a sharper boundary around operator authority."
 layout: reference
 permalink: /timeline/
 ---
