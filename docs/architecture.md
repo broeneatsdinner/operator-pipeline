@@ -10,12 +10,11 @@ environment.
 
 ```text
 operator-workbench.sh
-        |
-        +-- conductor identity helper
-        +-- collector verification and OPSEC helper
-        +-- collector-side discovery helper
-        +-- review, selection, and inventory helpers
-        +-- runtime records under log/ and scans/
+├── conductor identity helper
+├── collector verification and OPSEC helper
+├── collector-side discovery helper
+├── review, selection, and inventory helpers
+└── runtime records under log/ and scans/
 ```
 
 ## Workbench and helpers
